@@ -45,21 +45,25 @@ type ConfigFrom<T> = {
  * that a type argument be provided.
  */
 export type InferConfig<T extends ConfigDefinition> = {
-  [K in keyof T as IsConfigProperty<T[K]> extends true
-    ? IsOptionalWithoutDefault<T[K]> extends true
-      ? never
+  [
+    K in keyof T as IsConfigProperty<T[K]> extends true
+      ? IsOptionalWithoutDefault<T[K]> extends true
+        ? never
+        : K
       : K
-    : K]: IsConfigProperty<T[K]> extends true
+  ]: IsConfigProperty<T[K]> extends true
     ? PropertyOutput<T[K]>
     : T[K] extends ConfigDefinition
       ? InferConfig<T[K]>
       : never;
 } & {
-  [K in keyof T as IsConfigProperty<T[K]> extends true
-    ? IsOptionalWithoutDefault<T[K]> extends true
-      ? K
+  [
+    K in keyof T as IsConfigProperty<T[K]> extends true
+      ? IsOptionalWithoutDefault<T[K]> extends true
+        ? K
+        : never
       : never
-    : never]?: PropertyOutput<T[K]> | undefined;
+  ]?: PropertyOutput<T[K]> | undefined;
 };
 
 type PropertyOutput<P> = P extends { format: infer S }
