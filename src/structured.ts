@@ -1,6 +1,7 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: ___
 
 import type { StandardSchemaV1 } from "@standard-schema/spec";
+import { captureStackTrace } from "./capture-stack-trace.js";
 import { AsyncValidationError, EnvValidationError } from "./errors.js";
 
 /**
@@ -155,7 +156,7 @@ export function envParse<T extends ConfigDefinition>(
 
     if (validationResult instanceof Promise) {
       const error = new AsyncValidationError();
-      Error.captureStackTrace(error, envParse);
+      captureStackTrace(error, envParse);
       throw error;
     }
 
@@ -221,7 +222,7 @@ export function envParse<T extends ConfigDefinition>(
           ? vendors.values().next().value!
           : `mixed(${Array.from(vendors).join(",")})`;
     const error = new EnvValidationError(issues, vendorLabel);
-    Error.captureStackTrace(error, envParse);
+    captureStackTrace(error, envParse);
     throw error;
   }
 
