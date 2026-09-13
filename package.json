@@ -20,7 +20,7 @@
     "clean": "rimraf ./dist",
     "build": "bun run clean && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "lint": "oxlint --type-aware && oxfmt --check",
+    "lint": "oxlint --type-aware --deny-warnings && oxfmt --check",
     "fmt": "oxfmt",
     "test": "vitest",
     "prepack": "bun run build",
