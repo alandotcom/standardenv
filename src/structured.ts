@@ -1,6 +1,7 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: ___
 
 import type { StandardSchemaV1 } from "@standard-schema/spec";
+import { captureStackTrace } from "./capture-stack-trace.js";
 import { AsyncValidationError, EnvValidationError } from "./errors.js";
 
 /**
@@ -45,21 +46,25 @@ type ConfigFrom<T> = {
  * that a type argument be provided.
  */
 export type InferConfig<T extends ConfigDefinition> = {
-  [K in keyof T as IsConfigProperty<T[K]> extends true
-    ? IsOptionalWithoutDefault<T[K]> extends true
-      ? never
+  [
+    K in keyof T as IsConfigProperty<T[K]> extends true
+      ? IsOptionalWithoutDefault<T[K]> extends true
+        ? never
+        : K
       : K
-    : K]: IsConfigProperty<T[K]> extends true
+  ]: IsConfigProperty<T[K]> extends true
     ? PropertyOutput<T[K]>
     : T[K] extends ConfigDefinition
       ? InferConfig<T[K]>
       : never;
 } & {
-  [K in keyof T as IsConfigProperty<T[K]> extends true
-    ? IsOptionalWithoutDefault<T[K]> extends true
-      ? K
+  [
+    K in keyof T as IsConfigProperty<T[K]> extends true
+      ? IsOptionalWithoutDefault<T[K]> extends true
+        ? K
+        : never
       : never
-    : never]?: PropertyOutput<T[K]> | undefined;
+  ]?: PropertyOutput<T[K]> | undefined;
 };
 
 type PropertyOutput<P> = P extends { format: infer S }
@@ -96,6 +101,27 @@ function isConfigProperty(value: unknown): value is ConfigProperty<StandardSchem
 }
 
 /**
+ * Any non-null object reached during traversal that is not itself a property
+ * definition, and so is treated as a nested group of properties.
+ */
+function isNestedConfig(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+/**
+ * Read a validator's Standard Schema properties, or `undefined` when the
+ * validator does not implement the interface.
+ *
+ * `ConfigProperty` declares `format` as a `StandardSchemaV1`, but the value is
+ * supplied by calling code and arrives here unchecked. Reading `~standard`
+ * through an optional type keeps a non-compliant validator on the path that
+ * reports it as an issue, instead of throwing on a missing property.
+ */
+function standardSchemaProps(format: StandardSchemaV1): StandardSchemaV1.Props | undefined {
+  return (format as Partial<StandardSchemaV1> | undefined)?.["~standard"];
+}
+
+/**
  * Parse environment variables using a declarative configuration structure.
  *
  * The second argument must satisfy the shape given by `ConfigFrom<T>`.  This
@@ -116,7 +142,7 @@ export function envParse<T extends ConfigDefinition>(
   ): { issues: StandardSchemaV1.Issue[]; value?: unknown } {
     const propertyIssues: StandardSchemaV1.Issue[] = [];
     const envValue = envVars[property.env];
-    const standardProps = property.format?.["~standard"];
+    const standardProps = standardSchemaProps(property.format);
     if (standardProps && typeof standardProps.vendor === "string") {
       vendors.add(standardProps.vendor);
     }
@@ -151,7 +177,7 @@ export function envParse<T extends ConfigDefinition>(
 
     if (validationResult instanceof Promise) {
       const error = new AsyncValidationError();
-      Error.captureStackTrace(error, envParse);
+      captureStackTrace(error, envParse);
       throw error;
     }
 
@@ -189,25 +215,22 @@ export function envParse<T extends ConfigDefinition>(
   }
 
   function processConfig(
-    configObj: ConfigDefinition,
+    configObj: Record<string, unknown>,
     envVars: Record<string, string | undefined>,
     target: Record<string, unknown>,
   ): void {
     for (const [key, value] of Object.entries(configObj)) {
       if (isConfigProperty(value)) {
         handleConfigProperty(key, value, envVars, target);
-      } else if (typeof value === "object" && value !== null) {
-        target[key] = {};
-        // oxlint-disable-next-line typescript-eslint(no-unsafe-type-assertion)
-        processConfig(value, envVars, target[key] as Record<string, unknown>);
+      } else if (isNestedConfig(value)) {
+        const nested: Record<string, unknown> = {};
+        target[key] = nested;
+        processConfig(value, envVars, nested);
       }
     }
   }
 
-  // Cast the config to `ConfigDefinition` for runtime processing; at compile
-  // time it satisfies `ConfigFrom<T>`.
-  // oxlint-disable-next-line typescript-eslint(no-unsafe-type-assertion)
-  processConfig(config as unknown as ConfigDefinition, env, result);
+  processConfig(config, env, result);
 
   if (issues.length > 0) {
     const vendorLabel =
@@ -217,10 +240,12 @@ export function envParse<T extends ConfigDefinition>(
           ? vendors.values().next().value!
           : `mixed(${Array.from(vendors).join(",")})`;
     const error = new EnvValidationError(issues, vendorLabel);
-    Error.captureStackTrace(error, envParse);
+    captureStackTrace(error, envParse);
     throw error;
   }
 
-  // oxlint-disable-next-line typescript-eslint(no-unsafe-type-assertion)
+  // `result` is built key by key at runtime, so its shape is only known to match
+  // `InferConfig<T>` by construction. This is the one assertion the design needs.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   return result as InferConfig<T>;
 }

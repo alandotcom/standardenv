@@ -1,4 +1,5 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
+import { captureStackTrace } from "./capture-stack-trace.js";
 
 export class EnvValidationError extends Error {
   readonly issues: readonly StandardSchemaV1.Issue[];
@@ -9,7 +10,7 @@ export class EnvValidationError extends Error {
     this.name = "EnvValidationError";
     this.issues = issues;
     this.vendor = vendor;
-    Error.captureStackTrace(this, EnvValidationError);
+    captureStackTrace(this, EnvValidationError);
   }
 
   private static formatMessage(issues: readonly StandardSchemaV1.Issue[], vendor: string): string {
@@ -36,6 +37,6 @@ export class AsyncValidationError extends Error {
     );
     this.name = "AsyncValidationError";
 
-    Error.captureStackTrace(this, AsyncValidationError);
+    captureStackTrace(this, AsyncValidationError);
   }
 }
