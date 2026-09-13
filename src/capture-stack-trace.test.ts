@@ -2,11 +2,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { captureStackTrace } from "./capture-stack-trace.js";
 import { EnvValidationError } from "./errors.js";
 
-// Reached through an index signature so the tests can remove `captureStackTrace`
-// and put it back. The ambient runtime types declare it as a required property,
-// which would otherwise rule out both the removal and the restore.
-const errorGlobal = Error as unknown as Record<string, unknown>;
-const originalCapture = errorGlobal.captureStackTrace;
+// Reached reflectively so the tests can remove `captureStackTrace` and put it
+// back. The ambient runtime types declare it as a required property, which would
+// otherwise rule out both the removal and the restore.
+const originalCapture: unknown = Reflect.get(Error, "captureStackTrace");
 
 /** Run the engines that omit the V8 extension, such as SpiderMonkey and JavaScriptCore. */
 function withoutCaptureStackTrace() {
@@ -14,7 +13,11 @@ function withoutCaptureStackTrace() {
 }
 
 afterEach(() => {
-  errorGlobal.captureStackTrace = originalCapture;
+  if (originalCapture === undefined) {
+    Reflect.deleteProperty(Error, "captureStackTrace");
+  } else {
+    Reflect.set(Error, "captureStackTrace", originalCapture);
+  }
 });
 
 /** Raises an error and trims its own frame off the stack, leaving its callers. */
